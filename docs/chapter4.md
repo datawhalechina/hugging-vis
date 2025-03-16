@@ -23,7 +23,7 @@ $$
 
 其中是关于条件概率、联合概率的计算公式。在进一步引入基于马尔科夫假设的条件概率计算公式之前，我们需要线了解下什么是马尔可夫性？
 
-马尔可夫性是指给定过去的状态$A=\left \{ X_{0},X_{1},...,X_{n-1}  \right \}$和现在的状态$B=X_{n}$，将来的状态的条件分布$C=X_{n+1}$与过去的状态独立，只依赖于现在的状态。所以基于马尔科夫假设的条件概率计算公式为：
+马尔可夫性是指给定过去的状态$A=\left \{ X_{0},X_{1},...,X_{n-1}  \right \}$和现在的状态$B=X_{n}$，将来的状态的条件分布$C=X_{n+1}$与过去的状态独立$A$，只依赖于现在的状态$B$。所以基于马尔科夫假设的条件概率计算公式为：
 
 $$
 \begin{aligned}
@@ -157,7 +157,7 @@ $$
 
 ### 4.3.2 从十到一
 
-DPM-Solver是一种基于扩散概率模型（Diffusion Probabilistic Models, DPM）的快速采样方法，旨在通过高阶数值方法加速采样过程。因此，DPM-Solver的核心思想与DDIM相似，是将扩散模型的反向过程视为一个常微分方程（ODE），但是它用了高阶数值方法（如 Runge-Kutta 方法）求解该ODE，从而实现快速采样，具体方法推导不在此赘述。如图4.2所示，在与DDPM和DDIM相比，DPM-Solver在保证生成质量的同时显著减少了采样步数。
+DPM-Solver是一种基于扩散概率模型（Diffusion Probabilistic Models, DPM）的快速采样方法，旨在通过高阶数值方法加速采样过程。因此，DPM-Solver的核心思想与DDIM相似，都是将扩散模型的反向过程视为一个常微分方程（ODE），但是它用了高阶数值方法（如 Runge-Kutta 方法）求解该ODE，从而实现快速采样，具体方法推导不在此讨论。如图4.2所示，在与DDPM和DDIM相比，DPM-Solver在保证生成质量的同时显著减少了采样步数。
 
 <div align=center>
 <img width="650" src="./images/chapter4/diffusion_compare.png"/>
@@ -172,7 +172,9 @@ DDPM自2020年被提出以来，迅速成为生成建模领域的核心技术之
 
 在扩散模型中，条件生成（如生成特定类别的图像或文本到图像）是关键需求，它使得模型不仅能够生成高质量样本，还能根据用户提供的先验信息进行控制，从而满足实际应用需求。
 
-在早期的条件扩散模型中，使用Classifier Guidance（CG）来进行条件控制，其核心思想是通过预训练的分类器提供梯度信号，调整扩散过程，使生成样本满足特定条件（如类别标签、文本描述）。具体而言，在扩散模型的噪声空间上训练一个分类器$p_\phi(y \mid x_t, t)$，其中$y$是条件（如类别标签），在采样时，将分类器的梯度信息注入到扩散模型的噪声预测中：
+一种简单的Vanilla Guidance条件控制策略是像CGAN、CVAE一样通过将条件直接作为网络输入的一部分控制生成，但是往往我们是需要guidance的大小是可以控制的，而Vanilla Guidance无法控制条件对样本的引导力度。
+
+因此，在早期的条件扩散模型中，使用Classifier Guidance（CG）来进行条件控制，其核心思想是通过预训练的分类器提供梯度信号，调整扩散过程，使生成样本满足特定条件（如类别标签、文本描述）。具体而言，在扩散模型的噪声空间上训练一个分类器$p_\phi(y \mid x_t, t)$，其中$y$是条件（如类别标签），在采样时，将分类器的梯度信息注入到扩散模型的噪声预测中：
 
 $$
 \hat{\epsilon}_\theta(x_t, t, y) = \epsilon_\theta(x_t, t) - s \cdot \sigma_t \nabla_{x_t} \log p_\phi(y \mid x_t, t)
@@ -190,13 +192,17 @@ $$
 \hat{\epsilon}_\theta(x_t, t, y) = \epsilon_\theta(x_t, t, \emptyset) + s \cdot \left( \epsilon_\theta(x_t, t, y) - \epsilon_\theta(x_t, t, \emptyset) \right)
 $$
 
-首先，在训练时以概率$p_{\text{drop}}$随机将条件$y$替换为空集$\emptyset$，迫使模型同时掌握两种生成模式；并且，让模型需预测有条件噪声$\epsilon_\theta(x_t, t, y)$ 和无条件噪声$\epsilon_\theta(x_t, t, \emptyset)$，从而联合训练目标；最终，在推理时插值，生成时混合有条件和无条件预测。其中$s$ 控制条件强度（通常$s \geq 1$）。
+首先，在训练时以概率$p_{\text{drop}}$随机将条件$y$替换为空集$\emptyset$，迫使模型同时掌握两种生成模式；并且，让模型需预测有条件噪声 $\epsilon_\theta(x_t, t, y)$ 和无条件噪声$\epsilon_\theta(x_t, t, \emptyset)$，从而联合训练目标；最终，在推理时插值，生成时混合有条件和无条件预测。其中$s$控制条件强度（通常$s \geq 1$）。s
 
-<div align=center>
-<img width="650" src="./images/chapter4/CG_CFG.png"/>
-</div>
-<div align=center>表4.2 CG和CFG对比总结</div>
 
+| 特性           | Vanilla Guidance | Classifier Guidance    | Classifier-Free Guidance |
+| -------------- | ---------------- | ---------------------- | ------------------------ |
+| 依然分类器     | 不需要           | 需要预训练分类器       | 不需要                   |
+| 训练复杂度     | 仅需训练模型     | 需训练分类器+扩散模型  | 仅需训练扩散模型         |
+| 推理速度       | 较快             | 较慢（分类器梯度计算） | 较快（直接预测插值）     |
+| 条件控制灵活性 | 差               | 中等                   | 高（通过权重直接跳价）   |
+| 生成质量稳定性 | 稳定             | 依赖分类器质量         | 更稳定                   |
+| 典型应用       | CGAN、CVAE       | 早期条件扩散模型       | Stable Diffusion、DALLE2 |
 
 ### 4.4.2 结构优化
 
