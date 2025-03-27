@@ -64,9 +64,8 @@
 
 - 5 图片生成与编辑
   - 模型结构
-    - DALL-E系列
+    - DALL-E系列  ✅
     - Stable-Diffusion系列
-    - Imagen系列
   - 可控生成
     - 文本控制
     - 多模态控制

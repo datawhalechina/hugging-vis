@@ -10,7 +10,7 @@
 
 ### 5.1.1 DALL-E系列
 
-DALL-E系列是OpenAI推出的文生图片模型，其中DALL-E-1是两阶段的生成模型。首先，用VQVAE的结构压缩图片的高维空间，通过将256×256的RGB图像压缩为32×32的离散图像标记（8192种可能的词元），显著降低了后续建模的计算复杂度。然后，利用BPE编码的文本标记（最多256个）与图像标记（1024个）拼接为单一输入流，通过自回归Transformer联合建模文本和图像的分布。VQVAE的训练过程与第一章中介绍的一致。第二部分的训练过程如图5.1所示。
+DALL-E系列是OpenAI推出的文生图片模型，其中DALL-E-1是两阶段的生成模型。首先，用VQVAE的结构压缩图片的高维空间，通过将256×256的RGB图像压缩为32×32的离散图像标记（8192种可能的词元），显著降低了后续建模的计算复杂度。然后，利用BPE编码的文本标记（最多256个）与图像标记（1024个）拼接为单一输入流，通过自回归Transformer联合建模文本和图像的分布。VQVAE的训练过程与第一章中介绍的一致，第二部分的训练过程如图5.1所示。
 
 
 <div align=center>
@@ -28,8 +28,32 @@ DALL-E-1有两个明显的缺点：
 DALL-E-2从以上两个方面对DALL-E-1进行了优化。如图5.2所示，在虚线上方是CLIP训练过程，通过该过程，我们可以学习文本和图像的联合表征空间。虚线下方是DALL-E-2的文本到图像的生成过程：首先将CLIP的文本表征送到自回归或扩散先验中以生成图像表征，然后使用此表征来调节和控制扩散解码器，从而生成最终文本描述的图像。这过程中需要训练的是文本到图片表征转换的先验以及解码器，CLIP模型始终处于冻结状态。
 
 <div align=center>
-<img width="650" src="./images/chapter5/dalle2.png"/>
+<img width="550" src="./images/chapter5/dalle2.png"/>
 </div>
-<div align=center>图5.1 DALL-E-1的文生图过程</div>
+<div align=center>图5.2 DALL-E-2的文生图过程</div>
 
 CLIP模型是OpenAI提出的基于海量图片文本对数据集进行对比学习预训练的图文跨模态特征对齐方法，CLIP由图片编码器和文本编码器组成，它们各自对图片和文本数据进行编码，两种数据模态的特征可以直接相似度和损失函数。但是DALL-E-2并没有直接用CLIP的文本Encoder编码的文本特征作为条件控制图片生成，因为这样的图片特征与文本特征还是存在较大的跨模态的gap。因此，需要将文本表征转换到对应的图片表征以控制Diffusion Decoder的生成。
+
+OpenAI发现现有的文本到图像模型在处理详细的图像描述时常常遇到困难，经常忽略或混淆提示的含义。OpenAI认为这个问题源于训练数据集中图像描述的噪声和不准确性。在大规模数据集中，人类通常只关注图像主题的简单描述，忽略了背景细节或图像中描绘的常识关系。常被忽略的重要细节可能包括：物体的存在，如厨房的水槽或人行道上的停车标志；物体在场景中的位置和数量；场景中物体的颜色和大小等常识细节；图像中显示的文本。为了进一步提升文本与图像的对齐程度，OpenAI训练了一个专门的图像描述生成器，并用它重新生成训练数据集的描述。这里选用的模型架构是谷歌的[CoCa](https://arxiv.org/abs/2205.01917)，如图5.3所示，CoCa相比CLIP额外增加了一个Multimodel Text Encoder来生成caption，它训练的损失也包含CLIP的对比损失和captioing的交叉熵损失。所以CoCa不仅可以像CLIP那样进行多模态检索，也可以用于caption生成。
+
+<div align=center>
+<img width="550" src="./images/chapter5/coca.png"/>
+</div>
+<div align=center>图5.3 CoCa的结构及训练过程</div>
+
+由于原先数据集中的caption是短的且质量差，为了提升模型生成文本描述（caption）的质量，利用训练好的image captioner对数据集中所有图片重新描述，形成新的描述图像内容的长caption，用这样的数据集训练模型，可以使得文本生成更符合文本描述，对齐度高。
+
+### 5.1.1 Stable-Diffusion系列
+
+Stable Diffusion系列是由[Stability](https://stability.ai/)、[Runway](https://runwayml.com/)、[CompVis](https://github.com/CompVis)等公司和机构推动的开源文生图模型。Stable Diffusion v1 使用下采样因子为 8 的自编码器 (autoencoder)、一个 8.6 亿参数的 UNet 以及 CLIP ViT-L/14 文本编码器作为扩散模型。该模型在 256x256 图像上进行了预训练，然后在 512x512 图像上进行了微调，主要的结构如图5.4所示。
+
+<div align=center>
+<img width="550" src="./images/chapter5/stable-diffusion-1.png"/>
+</div>
+<div align=center>图5.3 Stable-Diffusion v1的模型结构</div>
+
+第一部分是AutoEncoder（图中红色部分），由Encoder和Decoder组成，可以理解为将人类能感知的图像空间(pixel space)映射到模型能感知的隐空间(latent space)。其中，Encoder将像素空间中的$x$映射到隐空间中的$z$，Decoder则是将去噪后的隐变量$z$从隐空间映射回像素空间得到$\tilde{x}$。
+
+第二部分是Generation Model（图中绿色部分），主要用的是扩散模型。其中每一步的去噪过程都使用的Unet结构来预测噪声，$z$经过前向加噪扩散过程之后得到加噪后的隐变量$z_T$，然后继续经过数步去噪之后得到去噪后的隐变量$z$。在v1中这部分用的是DDIM的方法。
+
+第三部分是Condition Model（图中灰色部分），主要是用文本、图片等条件控制第二部分是Generation Model中噪声的预测，从而达到控制图片生成的目的。在v1中这部分用的是预训练好的CLIP模型。
