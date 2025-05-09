@@ -42,7 +42,7 @@ OpenAI发现现有的文本到图像模型在处理详细的图像描述时常�
 
 由于原先数据集中的caption是短的且质量差，为了提升模型生成文本描述（caption）的质量，利用训练好的image captioner对数据集中所有图片重新描述，形成新的描述图像内容的长caption，用这样的数据集训练模型，可以使得文本生成更符合文本描述，对齐度高。
 
-### 5.1.1 Stable-Diffusion系列
+### 5.1.2 Stable-Diffusion系列
 
 Stable Diffusion系列是由[Stability](https://stability.ai/)、[Runway](https://runwayml.com/)、[CompVis](https://github.com/CompVis)等公司和机构推动的开源文生图模型。Stable Diffusion v1 使用下采样因子为 8 的自编码器 (autoencoder)、一个 8.6 亿参数的 UNet 以及 CLIP ViT-L/14 文本编码器作为扩散模型。该模型在 256x256 图像上进行了预训练，然后在 512x512 图像上进行了微调，主要的结构如图5.4所示。
 
@@ -59,7 +59,23 @@ Stable Diffusion系列是由[Stability](https://stability.ai/)、[Runway](https:
 
 后续的Stable-Diffuison v2都是大致遵循同样的结构，但是会在结构的细节参数上有所不同。例如，它使用下采样因子为 8 的自动编码器，以及一个 865M UNet 和 OpenCLIP ViT-H/14 文本编码器用于扩散模型，模型产生 768x768 像素的输出。
 
-TODO: 可控生成 Controlnet
+### 5.1.3 ControlNet系列
+
+前面我们提到的模型，都是通过文本控制来生成图片，但是语言描述的文本通常具有多义性，很难准确描述出一张图片的构成表示。因此，为了实现更精确的控制生成，ControlNet系列应运而生，它通过在原始Stable Diffusion模型旁增设可训练分支并锁定原有权重，使得用户可以输入边缘图、深度图、姿态图等额外条件来精细控制生成过程。它利用已有的强大预训练模型作为骨干，在保持原始生成能力的同时，通过注入“视觉提示”来增强图像合成的可控性和灵活性。
+
+<div align=center>
+<img width="400" src="./images/chapter5/controlnet.png"/>
+</div>
+<div align=center>图5.4 ControlNet介绍</div>
+
+如图5.4所示，在Stable Diffusion这样的文本到图像扩散模型中，ControlNet被嵌入于U-Net网络的各个编码层级，具体而言，Stable Diffusion的12个编码块（4种分辨率，每级重复3次）以及1个中间块都对应一个ControlNet可训练分支，其输出通过跳跃连接加到原模型的相应层上，这一简单结构在Stable Diffusion的整个U-Net中被重复应用14次，以对生成过程进行全面控制。由于锁定了原始网络的权重，仅对控制分支进行微调，ControlNet可以快速收敛并保持原模型的生成能力不变。
+
+ControlNet可以接收多种额外的图像条件作为引导输入，如Canny边缘图、深度图、人体姿态骨架图、分割图等，这些条件图像通常由专用的预处理网络（如HED边缘检测、MiDaS深度估计、OpenPose姿势检测等）生成，用于提取目标对象的结构信息。如何将这些条件注入模型呢？在每个U-Net块的ControlNet分支中，采用“双零卷积”结构将条件信息整合到网络：首先通过一个1×1的零初始化卷积层将条件特征映射并加到主干输入上，然后将其送入可训练副本块计算；最后再经过第二个1×1零卷积后与原始块的输出相加。由于这两个卷积层的权重初始为零，训练初期它们的输出都是零，因此ControlNet在开始训练时并不会对原始网络输出造成任何干扰。
+
+<div align=center>
+<img width="400" src="./images/chapter5/controlnet_block.png"/>
+</div>
+<div align=center>图5.4 ControlNet条件注入介绍</div>
 
 ## 5.2 模型微调
 
@@ -82,7 +98,6 @@ $$
 
 其中，$v_*$ 表示待优化的伪词嵌入向量（如 `S∗`），$z = \mathcal{E}(x)$表示用户图像通过编码器映射到潜在空间的特征，$y$ 表示基于模板生成的文本提示（如 “A photo of `S∗`”，$\epsilon_{\theta}$ 表示扩散模型的噪声预测网络，$c_{\theta}(y)$ 表示文本编码器生成的文本条件向量。通过优化嵌入向量 $v_*$ 时，固定文本编码器和扩散模型参数，仅调整 $v_*$，使其引导生成过程匹配用户图像。使用中性模板（如 “A photo of \(S_*”）生成多样化的文本提示，确保伪词嵌入能够泛化到不同上下文场景。
 
-
 ### 5.2.2 Dreambooth
 
 DreamBooth 是一种基于文本到图像生成模型（如 Stable Diffusion）的**个性化微调技术**，允许用户通过少量图像（通常3-5张）和特定文本标识符，将自定义知识或图片（如人物、宠物或物体）嵌入模型中，从而让模型能生成该主题的多样化图像。其与Textual-Inversion想做的事情一致，区别在于Textual-Inversion不会更新模型参数，而 DreamBooth 是需要全量微调模型参数。
@@ -90,7 +105,7 @@ DreamBooth 是一种基于文本到图像生成模型（如 Stable Diffusion）�
 具体而言，如图5.5所示，主要分为两个部分。其一是**标识符绑定与微调**（图中上面部分），通过少量（3-5张）用户提供的主题图像，在预训练的文本到图像扩散模型中绑定一个**唯一标识符**（如[V]）与目标主题（如宠物狗）。训练时，每张输入图像被标记为“A [标识符] [类名]”（如“A [V] dog”），通过微调模型参数将标识符与主题的视觉特征关联。注意，[V]需使用罕见词作为标识符，避免与预训练词汇的语义冲突，确保模型能专注于学习新主题。其二是**保留先验与防过拟合**（图中下面部分），在微调过程中，同时生成同类别的通用图像（如随机生成的“a dog”图像），用于让模型保留类别的原始知识，同时防止过拟合。
 
 <div align=center>
-<img width="550" src="./images/chapter5/dreambooth.png"/>
+<img width="500" src="./images/chapter5/dreambooth.png"/>
 </div>
 <div align=center>图5.5 dreambooth方法介绍</div>
 
@@ -109,7 +124,7 @@ $$
 正是因为像 DreamBooth 这样全模型微调的方法存在上述**高成本和操作复杂**的问题，研究者们开始探索更高效的模型个性化方案。LoRA（Low-Rank Adaptation技术由微软研究院的团队于 2021 年提出，初衷是为了在不重新训练整个大模型的情况下，让模型快速适应新任务。LoRA 最早应用于对数十亿参数的大型语言模型（LLM）进行高效微调——面对GPT-3这类超大模型，逐层微调不仅耗时且需要海量显存，因此LoRA旨在冻结预训练模型的大部分权重，仅调整很小一部分参数，从而大幅降低计算和存储开销。
 
 <div align=center>
-<img width="500" src="./images/chapter5/lora.png"/>
+<img width="400" src="./images/chapter5/lora.png"/>
 </div>
 <div align=center>图5.6 LoRA原理</div>
 
@@ -127,3 +142,41 @@ LoRA 带来的直接优势包括：
 需要注意的是，LoRA 的高效是以有限的可调整容量为代价的。如果选择的秩太低，LoRA 的模型可能无法完美再现全量微调的效果，表现为生成质量略有下降或细节不够丰富。
 
 ## 5.3 图片编辑
+
+除了直接生成图片以外，生成模型也可以对图片局部进行编辑。当前扩散模型的图片编辑大体分为两条路线。其一是“潜空间反演流”，先用 DDIM-Inversion 等算法将现有图像反推至高噪声潜变量，再沿扩散轨迹重采样，实现结构重排或大幅风格变换，保真度高，适合照片级再创作，但却需额外反演计算开销。其二是“指令驱动流”，生成大量成对的图片文本对进行模型训练，从而可以用一句自然语言指令对局部色彩或元素做语义级修改，交互便捷、推理开销小，但对 Token 对齐和场景复杂度较敏感。
+
+### 5.3.1 潜空间反演
+
+DDIM-Inversion（去噪扩散隐式模型反演）是扩散模型中一种重要的技术，其核心目标是将输入图像逆向映射到隐空间（latent space），以便进行图像重建、编辑或插值。其原理基于 DDIM 的非马尔可夫性和确定性生成过程。让我们先回忆以下第四章讲的DDIM的加噪过程：
+
+$$
+\begin{aligned}
+\mathbf{x}_t &= \sqrt{\alpha_t}\mathbf{x}_{t-1} + \sqrt{1 - \alpha_t}\boldsymbol{\epsilon}_{t-1} \boldsymbol{\epsilon}_{t-2}, \dots \sim \mathcal{N}(\mathbf{0}, \mathbf{I}) \\
+   &= \sqrt{\alpha_t \alpha_{t-1}} \mathbf{x}_{t-2} + \sqrt{1 - \alpha_t \alpha_{t-1}} \bar{\boldsymbol{\epsilon}}_{t-2} \\
+&= \dots \\
+&= \sqrt{\bar{\alpha}_t}\mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t}\boldsymbol{\epsilon} \\
+\end{aligned}
+$$
+
+在逆向过程中，$\mathbf{x}_{t-1}$ 的计算公式为：
+
+$$
+\mathbf{x}_{t-1} = \sqrt{\alpha_{t-1}} \left( \frac{\mathbf{x_t} - \sqrt{1-\alpha_t} \epsilon_\theta(\mathbf{x_t}, t)}{\sqrt{\alpha_t}} \right) + \sqrt{1 - \alpha_{t-1}} \epsilon_\theta(\mathbf{x_t}, t)
+$$
+
+其中，$ \alpha_t $ 随 $ t $ 增大而递减，$ \epsilon$ 是噪声。当方差参数 $σ_t=0$ 时，随机噪声项被消除，整个过程完全由模型预测的噪声 $ϵ_θ$ 驱动，从而确保每一步的确定性。
+
+在潜空间反演的基础上，P2P算法成功实现了基于文本词语的细粒度图片编辑。
+
+TODO
+
+### 5.3.2 指令驱动
+
+潜空间反演的过程较为耗时，通常在2-5分钟左右，有没有一种更直接的编辑方式呢？**InstructPix2Pix** 是一个预训练的模型，能根据自然语言指令对图像进行编辑的扩散模型，无需反演或手工标注，支持直接输入“图+编辑指令”，输出目标图像，实现真实图片的快速可控编辑。那么要如何构建成对的编辑前后的“图+编辑指令”的数据集呢？
+
+<div align=center>
+<img width="800" src="./images/chapter5/instructp2p.png"/>
+</div>
+<div align=center>图5.8 编辑前后的“图+编辑指令”的数据集生成</div>
+
+如图5.8所示，首先，输入原始图像 caption（来自 LAION 数据集），使用 GPT-3生成编辑指令 + 新 caption；之后，使用上一小节潜空间反演方法例如（Prompt-to-Prompt + Stable Diffusion）生成“编辑前/后图像”对，保持尽可能高的一致性；最后，用 CLIP 过滤筛选出质量高的图片对，构建大规模语义对齐数据集。模型是条件扩散模型，输入包括原图 latent、编辑指令 embedding。模型推理时，输入任意一张真实图片与一条自然语言指令；模型执行一次前向采样即可生成目标图，用户可调节 sI（保持原图结构）与 sT（遵循指令程度）以获得理想结果。
