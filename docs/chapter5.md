@@ -66,7 +66,7 @@ Stable Diffusion系列是由[Stability](https://stability.ai/)、[Runway](https:
 <div align=center>
 <img width="400" src="./images/chapter5/controlnet.png"/>
 </div>
-<div align=center>图5.4 ControlNet介绍</div>
+<div align=center>图5.4 ControlNet框架结构</div>
 
 如图5.4所示，在Stable Diffusion这样的文本到图像扩散模型中，ControlNet被嵌入于U-Net网络的各个编码层级，具体而言，Stable Diffusion的12个编码块（4种分辨率，每级重复3次）以及1个中间块都对应一个ControlNet可训练分支，其输出通过跳跃连接加到原模型的相应层上，这一简单结构在Stable Diffusion的整个U-Net中被重复应用14次，以对生成过程进行全面控制。由于锁定了原始网络的权重，仅对控制分支进行微调，ControlNet可以快速收敛并保持原模型的生成能力不变。
 
@@ -75,7 +75,7 @@ ControlNet可以接收多种额外的图像条件作为引导输入，如Canny�
 <div align=center>
 <img width="400" src="./images/chapter5/controlnet_block.png"/>
 </div>
-<div align=center>图5.4 ControlNet条件注入介绍</div>
+<div align=center>图5.4 ControlNet条件注入</div>
 
 ## 5.2 模型微调
 
@@ -88,7 +88,7 @@ ControlNet可以接收多种额外的图像条件作为引导输入，如Canny�
 <div align=center>
 <img width="550" src="./images/chapter5/textual_inversion.png"/>
 </div>
-<div align=center>图5.4 Textual_Inversion方法介绍</div>
+<div align=center>图5.4 Textual_Inversion方法</div>
 
 这种理解的过程就是模型优化**文本嵌入空间中的伪词向量**的过程，使得冻结的预训练文本到图像模型（如 LDM）能够生成与用户提供的少量图像（3-5张）高度匹配的个性化内容，优化目标定义为：
 
@@ -164,7 +164,7 @@ $$
 \mathbf{x}_{t-1} = \sqrt{\alpha_{t-1}} \left( \frac{\mathbf{x_t} - \sqrt{1-\alpha_t} \epsilon_\theta(\mathbf{x_t}, t)}{\sqrt{\alpha_t}} \right) + \sqrt{1 - \alpha_{t-1}} \epsilon_\theta(\mathbf{x_t}, t)
 $$
 
-其中，$ \alpha_t $ 随 $ t $ 增大而递减，$ \epsilon$ 是噪声。当方差参数 $σ_t=0$ 时，随机噪声项被消除，整个过程完全由模型预测的噪声 $ϵ_θ$ 驱动，从而确保每一步的确定性。
+其中，$ \alpha_t $ 随 $ t $ 增大而递减，$ \epsilon$ 是噪声。当方差参数 $σ_t=0$ 时，随机噪声项被消除，整个过程完全由模型预测的噪声 $ϵ_θ$ 驱动，从而确保每一步的确定性。DDIM前向过程也是对图片进行加噪，区别在于DDIM前向加的噪声是高斯随机噪声，而这里加的噪声是模型预测的噪声。
 
 在潜空间反演的基础上，P2P算法成功实现了基于文本词语的细粒度图片编辑。
 
