@@ -23,7 +23,7 @@ $$
 \min_G\max_DV(D,G)=\mathbb{E}_{\boldsymbol{x}\sim p_\mathrm{data}(\boldsymbol{x})}[\log D(\boldsymbol{x})]\boldsymbol{+}\mathbb{E}_{\boldsymbol{z}\sim p_{\boldsymbol{z}}(\boldsymbol{z})}[\log(1\boldsymbol{-}D(G(\boldsymbol{z})))].
 $$
 
-这样的过程恰似自然界中捕食者和被捕食着之间此起彼伏的竞争，但又相互依赖，相互进化。
+第一项是鼓励判别器正确识别真实图像，第二项是鼓励判别器正确识别伪造图像，同时也鼓励生成器尽量欺骗判别器。这样的过程恰似自然界中捕食者和被捕食着之间此起彼伏的竞争，但又相互依赖，相互进化。
 
 ## 2.2 架构优化与条件生成
 
