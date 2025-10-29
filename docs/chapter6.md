@@ -75,16 +75,39 @@ NeRF 通过学习一个隐式的辐射场函数，以连续方式表示三维场
 
 ### 6.3.2 高斯泼溅-3DGS
 
-3D Gaussian Splatting 是 2023 年 Inria 团队提出的一种**显式**神经渲染方法，可在 1080p 分辨率下实现 ≥ 30 fps 的实时新视角合成，兼顾 NeRF 级别的高质量细节。效果如图6.3.4所示
+3D Gaussian Splatting 是 2023 年 Inria 团队提出的一种**显式**神经渲染方法，可在 1080p 分辨率下实现 ≥ 30 fps 的实时新视角合成，兼顾 NeRF 级别的高质量细节。效果如图6.3.4所示。
 
-<div align="center">
-  <video width="500" controls autoplay muted loop>
-    <source src="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/content/videos/garden.mp4" type="video/mp4">
-  </video>
+<div align=center>
+<img width="600" src="./images/chapter6/3dgs_garden.png"/>
 </div>
 <div align="center">图6.3.4 3DGS场景建模渲染效果图</div>
 
 3D Gaussian Splatting 用高斯原语替代 MLP，将隐式体辐射场“显式化”，在不牺牲画质的前提下实现了真正的实时渲染，并为编辑与下游几何处理打开了大门。未来的发展重点将在压缩、动态场景、语义约束与跨模态生成方向。
+
+3DGS 用有限个各向异性三维高斯来近似空间中形状的组成，3DGS 把NeRF中“体渲染的射线积分”换成“屏幕上的各向异性高斯椭圆核叠加”。数学上通过投影的一阶近似雅可比把 3D 协方差变到 2D；通过前到后 α 合成得到可微的颜色；再用多视图监督优化高斯的位置、形状、透明度、视角相关颜色，在质量接近体渲染的同时获得图形学级的实时速度。如图6.3.4所示，在拟合形状的过程中，高斯椭圆的大小形状是在动态变化的。
+
+<div align=center>
+<img width="500" src="./images/chapter6/3dgs_1.png"/>
+</div>
+<div align=center>图6.3.4 3DGS的高斯椭圆拟合空间形状的过程</div>
+
+这种变化可以从数学意义来分析，记第 (i) 个高斯为
+
+$$
+\mathcal{G}_i(\mathbf{x})
+=\omega_i \mathcal{N}(\mathbf{x};\boldsymbol\mu_i,\boldsymbol\Sigma_i)
+=\omega_i(2\pi)^{-3/2}|\boldsymbol\Sigma_i|^{-1/2}
+\exp\Big(-\tfrac12(\mathbf{x}-\boldsymbol\mu_i)^\top\boldsymbol\Sigma_i^{-1}(\mathbf{x}-\boldsymbol\mu_i)\Big)
+$$
+
+其中 $u_i\in\mathbb{R}^3$ 为3DGS 椭球的中心，$\Sigma_i\in\mathbb{R}^{3\times 3}$ 为对称正定协方差，$\omega_i>0 $ 为密度尺度（或不透明度）。每个高斯同时携带**视角相关颜色**，通常以球谐基（Spherical Harmonics, SH）参数化：
+
+$$
+\mathbf{c}_i(\mathbf{v})=\mathbf{M}_i,\mathbf{y}_L(\mathbf{v})
+\in\mathbb{R}^3,
+$$
+
+$\mathbf{v}$ 是到相机的视向单位向量，$\mathbf{y}_L(\cdot)$ 为到 $L$ 阶的实 SH 基，它的维度为 $B=(L+1)^2$，$\mathbf{M}_i\in\mathbb{R}^{3\times B}$ 为待学参数。直观来说，$\sum_i \mathcal{G}_i$ 近似NeRF的“体密度场”，而 $\mathbf{c}_i(\cdot)$ 近似“方向相关的辐射颜色”。
 
 ## 6.2 三维生成
 
