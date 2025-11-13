@@ -111,4 +111,46 @@ $\mathbf{v}$ 是到相机的视向单位向量，$\mathbf{y}_L(\cdot)$ 为到 $L
 
 ## 6.2 三维生成
 
-如今借助NeRF、扩散模型与大语言模型驱动的 Text-to-3D 一键生成，3D 内容的创造速度与质量发生很大地跃迁。DreamFusion、Gaussian Splatting 等方法让文本或单张照片即可还原可交互的三维场景；同时，基于 SDF/GAN 的形状潜空间模型，则使海量个性化几何在毫秒级被“召唤”到屏幕。为元宇宙、电商数字孪生、机器人视觉等领域提供了前所未有的内容燃料。
+如今借助NeRF、扩散模型与大语言模型驱动的 Text-to-3D 一键生成，3D 内容的创造速度与质量发生很大地跃迁，让文本或单张照片即可还原可交互的三维场景；同时，基于 SDF/GAN 的形状潜空间模型，则使海量个性化几何在毫秒级被“召唤”到屏幕。为元宇宙、电商数字孪生、机器人视觉等领域提供了前所未有的内容燃料。三维生成的方法主要是分为两个流派，一类是基于传统形状表征（Mesh、SDF、点云等）的生成，优点是几何结构可控、拓扑明确，缺点是大规模数据集匮乏，难以扩展；另一类是基于新兴表征（NeRF、3DGS）的生成，优点是表达能力极强，可表示复杂光照、材质、透明度，缺点是几何不稳定、一致性差。
+
+### 6.2.1 基于传统形状表征的三维生成
+
+基于传统形状表征的三维生成方法主要通过显式或隐式几何结构来描述对象，例如 网格（Mesh）、点云（Point Cloud）、体素（Voxel）和隐式场（SDF/Occupancy Field）等。这类方法通常直接对3D几何进行建模，因此具有拓扑明确、可编辑性强、易于与现有3D工具链（Blender/CAD/Unity/UE）整合等优势，长期以来一直是 3D生成领域的主流。
+
+MeshDiffusion是近年来最具代表性的基于传统表征的3D生成工作之一，它首次将分数基扩散模型（Score-based Diffusion Models）直接应用在网格（mesh）结构上，能够生成高质量、拓扑一致的三维形状。
+
+<div align=center>
+<img width="800" src="./images/chapter6/MeshDiffusion.png"/>
+</div>
+<div align=center>图6.3.5 MeshDiffusion主要流程图</div>
+
+如图所示，MeshDiffusion 将传统网格表示拆解为几何（geometry）与拓扑（connectivity）两个互补部分，以同时保证生成形状的自由度与结构稳定性。在几何层面，模型首先将原始网格转换为适合神经建模的四面体网格（deformable tetrahedra）或符号距离场（SDF）。这些表征能够通过可微渲染获得监督，并允许在连续空间中对每个节点的坐标偏移与局部几何值进行建模。扩散模型在此高维几何空间中执行前向噪声扰动和反向生成，从而逐步恢复物体的三维形状，实现细节丰富、表面连续的几何生成。在拓扑部分，MeshDiffusion 采用固定模板（template topology）来约束网格连通关系。图中“Deformable Tetrahedra”部分展示了这一结构：无论训练还是生成阶段，模型都不会改变节点之间的连接方式，而是仅允许节点在空间中发生偏移。由于拓扑结构始终保持一致，模型在生成过程中不会出现传统 mesh 生成中的自交、面片翻转、孤立点或非流形结构等问题。这种“固定拓扑 + 可形变几何”的策略显著提升了生成网格的结构完整性和可用性。
+
+这类的方法，一般生成的物体结构较为简单。受限于数据集的限制，很难通过scale law通过扩大规模来进一步提升生成效果。
+
+### 6.2.2 基于新兴形状表征的三维生成
+
+由于3D的高质量数据难以获取并且制作成本昂贵，于是有研究者便想到利用图片数据更易获得，并且同为视觉模态，那么能不能通过一些方法，通过将2D图片升维到3D空间，以此来生成3D物体呢？NeRF和3DGS由于其高度依赖神经网络表征的特性，恰似提供了这样的桥梁。
+
+DreamFusion（Google Research, 2022）是文本到三维生成（Text-to-3D）领域的里程碑式工作。它首次证明：仅依赖 2D 文本扩散模型（如 Imagen）即可在没有任何3D数据集的情况下直接生成高质量的 3D 对象。其核心创新在于提出了Score Distillation Sampling（SDS），使得 3D 场景能够通过 2D 扩散模型的语义梯度进行优化，从而突破了传统 3D 生成数据匮乏、标注困难的问题。
+
+<div align=center>
+<img width="800" src="./images/chapter6/DreamFusion.png"/>
+</div>
+<div align=center>图6.3.6 DreamFusion主要流程图</div>
+
+DreamFusion 的整体流程可以分为三部分：
+
+其一，使用 NeRF 构建连续 3D 场（Radiance Field Representation）。DreamFusion选择以NeRF（Neural Radiance Field）作为3D表达的基础，其优点包括：可渲染性强，能从任意视角生成图像；连续空间表示，可表达复杂几何与细节；无拓扑限制，适合生成任意形状的对象。具体地，一个 NeRF( $f_\theta$ )通过网络参数 $\theta$ 输出：每个空间点的密度（density）和的颜色（radiance）。渲染函数 $\text{render}(f_\theta, v)$ 能在任意视角 $v$ 生成 RGB 图像。因此，DreamFusion 将三维生成任务转化为：优化 NeRF，使其渲染图像满足文本描述的语义。
+
+其二，使用 2D 文本扩散模型提供跨模态监督。DreamFusion不依赖3D数据集，而是完全利用预训练的2D文本条件扩散模型（如 Imagen）。给定文本提示词 $T$ 和某个视角渲染的图像 $ I = \text{render}(f_\theta, v) $，扩散模型能判断：图像是否符合文本语义？是否逼真？是否具有一致的结构？通过扩散模型在反向采样时学习到的分数（即噪声预测梯度）被视为一种“图像逼真性与文本一致性的语义梯度”。DreamFusion 的关键在于：将扩散模型的梯度传回NeRF，让NeRF朝着符合文本语义的方向生成几何与材质。
+
+其三，DreamFusion的核心贡献是提出了Score Distillation Sampling（SDS）。它提供了从 2D 扩散模型到 3D NeRF 的可微优化路径。扩散模型的目标是从噪声恢复出真实图像，因而内部学习了图像分布的 score function。
+SDS 利用扩散模型的噪声预测网络 $ \epsilon_\phi $ 构建损失：
+
+$$
+\nabla_\theta \mathcal{L}_{SDS}(\theta)
+= w(t) \left( \epsilon*\phi(x_t, t, T) - \epsilon_t \right) \frac{\partial x_t}{\partial \theta}
+$$
+
+其中，$ x_t $是 NeRF 渲染图像加入噪声后的样本，$T$ 是文本 prompt，$ \epsilon_\phi$ 提供指导生成的语义梯度，梯度最终回传到NeRF参数 $ \theta $。实质上NeRF的作用可以看作是一个大的约束器，去监督生成模型生成符合这个约束器的一系列连续视角的图片。这篇工作是可以算是文生3D方向迈出的关键一步，直接奠定了NeRF类方法在3D生成方面的应用。直观理解，相当于扩散模型告诉 NeRF：你当前渲染的图像离文本语义还差多少？该朝哪个方向修改？
